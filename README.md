@@ -43,6 +43,9 @@ The geometry topic uses `std_msgs/Float32MultiArray` to keep the first implement
 [12] x1, first boundary x at lookahead row
 [13] x2, second boundary x at lookahead row
 [14] x3, third boundary x at lookahead row, or -1 if missing
+[15] left lane center x at lookahead row
+[16] right lane center x at lookahead row, or -1 if missing
+[17] selected lane center x at lookahead row
 ```
 
 The perception node also publishes an annotated debug camera stream:

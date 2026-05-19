@@ -44,6 +44,9 @@ class LaneEstimate:
     x1: float = -1.0
     x2: float = -1.0
     x3: float = -1.0
+    left_lane_center_x: float = -1.0
+    right_lane_center_x: float = -1.0
+    selected_lane_center_x: float = -1.0
 
 
 class LanePerceptionNode(Node):
@@ -54,7 +57,8 @@ class LanePerceptionNode(Node):
         [valid, vanishing_x, vanishing_y, heading_error_norm,
          lateral_error_norm, confidence, left_x, right_x,
          lane_index, boundary_count, vp_spread_norm, lane_width_balance,
-         x1, x2, x3]
+         x1, x2, x3, left_lane_center_x, right_lane_center_x,
+         selected_lane_center_x]
 
     The normalized errors are divided by image width, so they stay roughly
     independent of the camera resolution.
@@ -348,14 +352,21 @@ class LanePerceptionNode(Node):
             elif index == 2:
                 estimate.x3 = value
 
+        if len(boundary_xs) >= 2:
+            estimate.left_lane_center_x = 0.5 * (boundary_xs[0] + boundary_xs[1])
+        if len(boundary_xs) >= 3:
+            estimate.right_lane_center_x = 0.5 * (boundary_xs[1] + boundary_xs[2])
+
         if selected is None:
             return estimate
 
         left_line, right_line = selected
         estimate.left_x = left_line.x_at(lookahead_y)
         estimate.right_x = right_line.x_at(lookahead_y)
-        lane_center_x = 0.5 * (estimate.left_x + estimate.right_x)
-        estimate.lateral_error_norm = (lane_center_x - image_center_x) / width
+        estimate.selected_lane_center_x = 0.5 * (estimate.left_x + estimate.right_x)
+        estimate.lateral_error_norm = (
+            estimate.selected_lane_center_x - image_center_x
+        ) / width
 
         vp, vp_spread = self.compute_robust_vanishing_point(boundaries)
         if vp is not None:
@@ -476,6 +487,11 @@ class LanePerceptionNode(Node):
             x1=estimate.x1,
             x2=estimate.x2,
             x3=estimate.x3,
+            left_lane_center_x=estimate.left_lane_center_x,
+            right_lane_center_x=estimate.right_lane_center_x,
+            selected_lane_center_x=self.blend(
+                previous.selected_lane_center_x, estimate.selected_lane_center_x, alpha
+            ),
         )
         self.filtered_estimate = filtered
         return filtered
@@ -501,6 +517,9 @@ class LanePerceptionNode(Node):
             float(estimate.x1),
             float(estimate.x2),
             float(estimate.x3),
+            float(estimate.left_lane_center_x),
+            float(estimate.right_lane_center_x),
+            float(estimate.selected_lane_center_x),
         ]
         self.geometry_pub.publish(msg)
 
@@ -574,21 +593,16 @@ class LanePerceptionNode(Node):
             )
 
         status = 'VALID' if estimate.valid else 'INVALID'
-        lane_name = 'none'
-        if estimate.valid and estimate.boundary_count < 3:
-            lane_name = 'current'
-        elif estimate.lane_index == 0.0:
-            lane_name = 'left'
-        elif estimate.lane_index == 1.0:
-            lane_name = 'right'
+        lane_name = self.lane_name(estimate)
         lines_text = [
-            f'lane: {status}  selected={lane_name}  conf={estimate.confidence:.2f}',
+            f'lane: {status}  lane_detected={lane_name}  conf={estimate.confidence:.2f}',
             f'vp=({estimate.vanishing_x:.1f}, {estimate.vanishing_y:.1f})',
             f'heading_error_norm={estimate.heading_error_norm:+.3f}',
             f'lateral_error_norm={estimate.lateral_error_norm:+.3f}',
             f'hough={len(lines)} boundaries={int(estimate.boundary_count)}',
             f'vp_spread={estimate.vp_spread_norm:+.3f} width_balance={estimate.lane_width_balance:+.2f}',
             f'x=[{estimate.x1:.0f}, {estimate.x2:.0f}, {estimate.x3:.0f}]',
+            f'lane_centers=[{estimate.left_lane_center_x:.0f}, {estimate.right_lane_center_x:.0f}] selected={estimate.selected_lane_center_x:.0f}',
         ]
         y = 24
         for text in lines_text:
@@ -615,6 +629,17 @@ class LanePerceptionNode(Node):
             y += 22
 
         return debug
+
+    def lane_name(self, estimate: LaneEstimate) -> str:
+        if not estimate.valid:
+            return 'none'
+        if estimate.valid and estimate.boundary_count < 3:
+            return 'current'
+        if estimate.lane_index == 0.0:
+            return 'left'
+        if estimate.lane_index == 1.0:
+            return 'right'
+        return 'unknown'
 
     def draw_model_line(
         self, image: np.ndarray, line: LaneLine, color: Tuple[int, int, int], thickness: int
