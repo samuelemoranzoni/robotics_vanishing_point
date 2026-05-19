@@ -36,6 +36,13 @@ The geometry topic uses `std_msgs/Float32MultiArray` to keep the first implement
 [5] confidence in [0, 1]
 [6] selected left lane boundary x at lookahead row
 [7] selected right lane boundary x at lookahead row
+[8] selected lane index: 0 left/current, 1 right, -1 unknown
+[9] number of ordered road boundaries used, up to 3
+[10] normalized vanishing-point spread from pairwise intersections
+[11] lane width balance when 3 boundaries are visible
+[12] x1, first boundary x at lookahead row
+[13] x2, second boundary x at lookahead row
+[14] x3, third boundary x at lookahead row, or -1 if missing
 ```
 
 The perception node also publishes an annotated debug camera stream:
@@ -50,7 +57,23 @@ Open it with:
 ros2 run rqt_image_view rqt_image_view /lane_debug/image
 ```
 
-The debug image shows the selected lane lines, the image center, the lookahead row, the vanishing point, and the numeric control values.
+The debug image shows all candidate lines in gray, up to three ordered road boundaries, the selected current-lane pair, the image center, the lookahead row, the vanishing point, and the numeric control values.
+
+Useful Hough tuning parameters in `lane_following.launch.py`:
+
+```text
+hough_threshold: lower values accept weaker lines
+hough_min_line_length_px: lower values accept shorter line fragments
+hough_max_line_gap_px: higher values merge more fragmented line pieces
+```
+
+The current defaults are intentionally permissive:
+
+```text
+hough_threshold = 24
+hough_min_line_length_px = 24.0
+hough_max_line_gap_px = 35.0
+```
 
 ## Build The Lane-Following Package
 

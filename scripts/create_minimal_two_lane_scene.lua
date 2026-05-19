@@ -14,7 +14,7 @@ local BASE_WORKSPACE = '/Users/samuelemoranzoni/Desktop/usi/robotics/lab/robotic
 local SCENE_PATH = PROJECT_ROOT .. '/scenes/minimal_two_lane_scene.ttt'
 
 local ROAD_LENGTH =200.0
-local LANE_WIDTH = 1.35
+local LANE_WIDTH = 1.10
 local ROAD_WIDTH = LANE_WIDTH * 2.0
 local ROAD_TOP_Z = 0.04
 local PAINT_Z = ROAD_TOP_Z + 0.010
@@ -23,7 +23,7 @@ local PAINT_Z = ROAD_TOP_Z + 0.010
 -- This orientation makes the robot sit correctly on the road.
 local ROBOT_ORIENTATION = {0, -math.pi / 2, 0}
 local ROBOT_GROUND_CLEARANCE = 0.005
-local ROBOT_START_X = -68.0
+local ROBOT_START_X = -98.0
 local ROBOT_START_Y = -LANE_WIDTH / 2.0
 
 -- Static high camera used as a clean perception sensor.
