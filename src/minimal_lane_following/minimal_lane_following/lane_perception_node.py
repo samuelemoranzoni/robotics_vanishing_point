@@ -38,6 +38,7 @@ class LaneEstimate:
     left_x: float = -1.0
     right_x: float = -1.0
     lane_index: float = -1.0
+    current_lane_index: float = -1.0
     boundary_count: float = 0.0
     vp_spread_norm: float = -1.0
     lane_width_balance: float = -1.0
@@ -47,6 +48,14 @@ class LaneEstimate:
     left_lane_center_x: float = -1.0
     right_lane_center_x: float = -1.0
     selected_lane_center_x: float = -1.0
+    image_width: float = -1.0
+    image_center_x: float = -1.0
+    m1: float = 0.0
+    b1: float = -1.0
+    m2: float = 0.0
+    b2: float = -1.0
+    m3: float = 0.0
+    b3: float = -1.0
 
 
 class LanePerceptionNode(Node):
@@ -58,7 +67,8 @@ class LanePerceptionNode(Node):
          lateral_error_norm, confidence, left_x, right_x,
          lane_index, boundary_count, vp_spread_norm, lane_width_balance,
          x1, x2, x3, left_lane_center_x, right_lane_center_x,
-         selected_lane_center_x]
+         selected_lane_center_x, current_lane_index, image_width,
+         image_center_x, m1, b1, m2, b2, m3, b3]
 
     The normalized errors are divided by image width, so they stay roughly
     independent of the camera resolution.
@@ -112,13 +122,14 @@ class LanePerceptionNode(Node):
         edges = cv2.Canny(mask, 60, 160)
         lines = self.detect_lane_lines(edges, width, height)
         boundaries = self.select_road_boundaries(lines, image_center_x, lookahead_y)
-        selected, lane_index = self.select_current_lane_lines(
+        current_lane, current_lane_index = self.select_current_lane_lines(
             boundaries, image_center_x, lookahead_y
         )
         raw_estimate = self.compute_lane_estimate(
             boundaries,
-            selected,
-            lane_index,
+            current_lane,
+            current_lane_index,
+            current_lane_index,
             image_center_x,
             lookahead_y,
             width,
@@ -133,7 +144,7 @@ class LanePerceptionNode(Node):
             mask,
             lines,
             boundaries,
-            selected,
+            current_lane,
             estimate,
             lookahead_y,
         )
@@ -337,20 +348,33 @@ class LanePerceptionNode(Node):
         boundaries: List[LaneLine],
         selected: Optional[Tuple[LaneLine, LaneLine]],
         lane_index: float,
+        current_lane_index: float,
         image_center_x: float,
         lookahead_y: float,
         width: int,
         height: int,
     ) -> LaneEstimate:
-        estimate = LaneEstimate(boundary_count=float(len(boundaries)), lane_index=lane_index)
+        estimate = LaneEstimate(
+            boundary_count=float(len(boundaries)),
+            lane_index=lane_index,
+            current_lane_index=current_lane_index,
+            image_width=float(width),
+            image_center_x=float(image_center_x),
+        )
         boundary_xs = [line.x_at(lookahead_y) for line in boundaries[:3]]
         for index, value in enumerate(boundary_xs):
             if index == 0:
                 estimate.x1 = value
+                estimate.m1 = boundaries[index].m
+                estimate.b1 = boundaries[index].b
             elif index == 1:
                 estimate.x2 = value
+                estimate.m2 = boundaries[index].m
+                estimate.b2 = boundaries[index].b
             elif index == 2:
                 estimate.x3 = value
+                estimate.m3 = boundaries[index].m
+                estimate.b3 = boundaries[index].b
 
         if len(boundary_xs) >= 2:
             estimate.left_lane_center_x = 0.5 * (boundary_xs[0] + boundary_xs[1])
@@ -481,6 +505,7 @@ class LanePerceptionNode(Node):
             left_x=self.blend(previous.left_x, estimate.left_x, alpha),
             right_x=self.blend(previous.right_x, estimate.right_x, alpha),
             lane_index=estimate.lane_index,
+            current_lane_index=estimate.current_lane_index,
             boundary_count=estimate.boundary_count,
             vp_spread_norm=estimate.vp_spread_norm,
             lane_width_balance=estimate.lane_width_balance,
@@ -492,6 +517,14 @@ class LanePerceptionNode(Node):
             selected_lane_center_x=self.blend(
                 previous.selected_lane_center_x, estimate.selected_lane_center_x, alpha
             ),
+            image_width=estimate.image_width,
+            image_center_x=estimate.image_center_x,
+            m1=estimate.m1,
+            b1=estimate.b1,
+            m2=estimate.m2,
+            b2=estimate.b2,
+            m3=estimate.m3,
+            b3=estimate.b3,
         )
         self.filtered_estimate = filtered
         return filtered
@@ -520,6 +553,15 @@ class LanePerceptionNode(Node):
             float(estimate.left_lane_center_x),
             float(estimate.right_lane_center_x),
             float(estimate.selected_lane_center_x),
+            float(estimate.current_lane_index),
+            float(estimate.image_width),
+            float(estimate.image_center_x),
+            float(estimate.m1),
+            float(estimate.b1),
+            float(estimate.m2),
+            float(estimate.b2),
+            float(estimate.m3),
+            float(estimate.b3),
         ]
         self.geometry_pub.publish(msg)
 
@@ -593,7 +635,7 @@ class LanePerceptionNode(Node):
             )
 
         status = 'VALID' if estimate.valid else 'INVALID'
-        lane_name = self.lane_name(estimate)
+        lane_name = self.lane_name(estimate.current_lane_index, estimate)
         lines_text = [
             f'lane: {status}  lane_detected={lane_name}  conf={estimate.confidence:.2f}',
             f'vp=({estimate.vanishing_x:.1f}, {estimate.vanishing_y:.1f})',
@@ -630,14 +672,14 @@ class LanePerceptionNode(Node):
 
         return debug
 
-    def lane_name(self, estimate: LaneEstimate) -> str:
+    def lane_name(self, lane_index: float, estimate: LaneEstimate) -> str:
         if not estimate.valid:
             return 'none'
         if estimate.valid and estimate.boundary_count < 3:
             return 'current'
-        if estimate.lane_index == 0.0:
+        if lane_index == 0.0:
             return 'left'
-        if estimate.lane_index == 1.0:
+        if lane_index == 1.0:
             return 'right'
         return 'unknown'
 

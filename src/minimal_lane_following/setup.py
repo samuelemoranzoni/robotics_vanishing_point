@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'lane_perception_node = minimal_lane_following.lane_perception_node:main',
+            'obstacle_perception_node = minimal_lane_following.obstacle_perception_node:main',
             'lane_controller_node = minimal_lane_following.lane_controller_node:main',
         ],
     },

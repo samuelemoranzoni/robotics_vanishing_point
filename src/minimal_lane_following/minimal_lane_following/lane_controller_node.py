@@ -24,6 +24,7 @@ class LaneControllerNode(Node):
         super().__init__('lane_controller_node')
 
         self.declare_parameter('geometry_topic', '/lane_geometry')
+        self.declare_parameter('obstacle_topic', '/obstacle_detection')
         self.declare_parameter('cmd_vel_topic', '/rm0/cmd_vel')
         self.declare_parameter('control_rate_hz', 30.0)
         self.declare_parameter('linear_speed', 0.12)
@@ -33,8 +34,11 @@ class LaneControllerNode(Node):
         self.declare_parameter('stale_timeout_sec', 0.35)
         self.declare_parameter('hold_last_valid_sec', 0.25)
         self.declare_parameter('steering_sign', -1.0)
+        self.declare_parameter('enable_obstacle_avoidance', True)
+        self.declare_parameter('manual_target_lane', 'current')
 
         geometry_topic = self.get_parameter('geometry_topic').value
+        obstacle_topic = self.get_parameter('obstacle_topic').value
         cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         control_rate_hz = float(self.get_parameter('control_rate_hz').value)
 
@@ -42,8 +46,12 @@ class LaneControllerNode(Node):
         self.geometry_sub = self.create_subscription(
             Float32MultiArray, geometry_topic, self.geometry_callback, 10
         )
+        self.obstacle_sub = self.create_subscription(
+            Float32MultiArray, obstacle_topic, self.obstacle_callback, 10
+        )
 
         self.latest_geometry: Optional[Float32MultiArray] = None
+        self.latest_obstacle: Optional[Float32MultiArray] = None
         self.latest_geometry_time = self.get_clock().now()
         self.last_valid_time = self.get_clock().now()
         self.last_stop_log_time = self.get_clock().now()
@@ -57,6 +65,9 @@ class LaneControllerNode(Node):
     def geometry_callback(self, msg: Float32MultiArray) -> None:
         self.latest_geometry = msg
         self.latest_geometry_time = self.get_clock().now()
+
+    def obstacle_callback(self, msg: Float32MultiArray) -> None:
+        self.latest_obstacle = msg
 
     def control_step(self) -> None:
         now = self.get_clock().now()
@@ -79,7 +90,8 @@ class LaneControllerNode(Node):
 
         valid, heading_error, lateral_error, confidence = parsed
         if valid:
-            cmd = self.compute_command(heading_error, lateral_error, confidence)
+            target_lateral_error = self.select_lateral_error(self.latest_geometry, lateral_error)
+            cmd = self.compute_command(heading_error, target_lateral_error, confidence)
             self.last_valid_time = now
             self.last_cmd = cmd
             self.cmd_pub.publish(cmd)
@@ -108,6 +120,52 @@ class LaneControllerNode(Node):
         lateral_error_norm = float(msg.data[4])
         confidence = float(msg.data[5])
         return valid, heading_error_norm, lateral_error_norm, confidence
+
+    def select_lateral_error(
+        self, geometry: Float32MultiArray, current_lateral_error: float
+    ) -> float:
+        """Return lateral error for current lane or lane-change target."""
+        target_lane = self.choose_target_lane(geometry)
+        if target_lane < 0.0 or len(geometry.data) < 21:
+            return current_lateral_error
+
+        left_center_x = float(geometry.data[15])
+        right_center_x = float(geometry.data[16])
+        image_width = float(geometry.data[19])
+        image_center_x = float(geometry.data[20])
+        if image_width <= 1.0:
+            return current_lateral_error
+
+        target_center_x = left_center_x if target_lane == 0.0 else right_center_x
+        if target_center_x < 0.0:
+            return current_lateral_error
+        return (target_center_x - image_center_x) / image_width
+
+    def choose_target_lane(self, geometry: Float32MultiArray) -> float:
+        """Pick current lane, manual target, or obstacle-avoidance target."""
+        if len(geometry.data) < 19:
+            return -1.0
+
+        current_lane = float(geometry.data[18])
+        manual = str(self.get_parameter('manual_target_lane').value).strip().lower()
+        if manual == 'left':
+            return 0.0
+        if manual == 'right':
+            return 1.0
+
+        obstacle_avoidance = bool(self.get_parameter('enable_obstacle_avoidance').value)
+        if not obstacle_avoidance or self.latest_obstacle is None:
+            return current_lane
+        if len(self.latest_obstacle.data) < 4:
+            return current_lane
+
+        obstacle_valid = self.latest_obstacle.data[0] > 0.5
+        obstacle_lane = float(self.latest_obstacle.data[2])
+        obstacle_close = self.latest_obstacle.data[3] > 0.5
+        if obstacle_valid and obstacle_close and obstacle_lane == current_lane:
+            return 1.0 if current_lane == 0.0 else 0.0
+
+        return current_lane
 
     def compute_command(
         self, heading_error: float, lateral_error: float, confidence: float

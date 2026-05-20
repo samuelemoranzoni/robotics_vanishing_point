@@ -191,6 +191,28 @@ local function setupSceneCamera()
     end
 end
 
+
+local function addCar(alias, x, y, color)
+    local body = cuboid(alias .. '_body', {0.72, 0.42, 0.23}, {x, y, 0.18}, color, 0, true)
+    local roof = cuboid(
+        alias .. '_roof',
+        {0.34, 0.36, 0.16},
+        {x - 0.02, y, 0.36},
+        {color[1] * 0.75, color[2] * 0.75, color[3] * 0.75},
+        0,
+        false
+    )
+    sim.setObjectParent(roof, body, true)
+    
+end
+
+
+
+addCar('camera_test_car_21',-85 , 0.65, {0.85, 0.04, 0.03})
+addCar('camera_test_car_22', -88, -0.65, {0.03, 0.72, 0.10})
+
+
+
 -- Start from a clean scene.
 local defaultFloor = sim.getObject('/Floor', {noError = true})
 if defaultFloor ~= nil and defaultFloor >= 0 then
