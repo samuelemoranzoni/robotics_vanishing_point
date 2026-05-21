@@ -91,6 +91,7 @@ class LanePerceptionNode(Node):
         self.declare_parameter('draw_debug_guides', True)
         self.declare_parameter('max_boundary_count', 3)
         self.declare_parameter('temporal_filter_alpha', 0.25)
+        self.declare_parameter('camera_horizontal_fov_deg', 90.0)
 
         image_topic = self.get_parameter('image_topic').value
         geometry_topic = self.get_parameter('geometry_topic').value
@@ -636,10 +637,11 @@ class LanePerceptionNode(Node):
 
         status = 'VALID' if estimate.valid else 'INVALID'
         lane_name = self.lane_name(estimate.current_lane_index, estimate)
+        heading_angle_deg = self.compute_heading_angle_deg(estimate, width)
         lines_text = [
             f'lane: {status}  lane_detected={lane_name}  conf={estimate.confidence:.2f}',
             f'vp=({estimate.vanishing_x:.1f}, {estimate.vanishing_y:.1f})',
-            f'heading_error_norm={estimate.heading_error_norm:+.3f}',
+            f'heading_error_norm={estimate.heading_error_norm:+.3f} angle={heading_angle_deg:+.1f} deg',
             f'lateral_error_norm={estimate.lateral_error_norm:+.3f}',
             f'hough={len(lines)} boundaries={int(estimate.boundary_count)}',
             f'vp_spread={estimate.vp_spread_norm:+.3f} width_balance={estimate.lane_width_balance:+.2f}',
@@ -671,6 +673,21 @@ class LanePerceptionNode(Node):
             y += 22
 
         return debug
+
+    def compute_heading_angle_deg(self, estimate: LaneEstimate, width: int) -> float:
+        """Convert vanishing-point displacement into an approximate camera angle."""
+        if not estimate.valid or width <= 0:
+            return 0.0
+
+        fov_deg = float(self.get_parameter('camera_horizontal_fov_deg').value)
+        fov_deg = max(1.0, min(179.0, fov_deg))
+        focal_px = width / (2.0 * math.tan(math.radians(fov_deg) / 2.0))
+        if focal_px <= 1e-6:
+            return 0.0
+
+        image_center_x = width / 2.0
+        angle_rad = math.atan((estimate.vanishing_x - image_center_x) / focal_px)
+        return math.degrees(angle_rad)
 
     def lane_name(self, lane_index: float, estimate: LaneEstimate) -> str:
         if not estimate.valid:

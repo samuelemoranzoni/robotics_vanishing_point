@@ -18,6 +18,7 @@ def generate_launch_description():
                 'hough_threshold': 24,
                 'hough_min_line_length_px': 24.0,
                 'hough_max_line_gap_px': 35.0,
+                'camera_horizontal_fov_deg': 90.0,
             }],
         ),
         Node(
