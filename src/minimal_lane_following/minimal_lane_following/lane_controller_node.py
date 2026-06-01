@@ -9,7 +9,7 @@ from std_msgs.msg import Float32MultiArray
 class LaneControllerNode(Node):
     """Convert lane geometry errors into RoboMaster velocity commands.
 
-    The controller is intentionally simple:
+    The controller is simple:
 
         angular_z = steering_sign * (
             kp_lateral * lateral_error_norm
