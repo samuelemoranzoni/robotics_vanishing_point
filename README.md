@@ -70,6 +70,18 @@ The geometry topic uses `std_msgs/Float32MultiArray` to keep the first implement
 [26] third boundary intercept b
 ```
 
+The heading angle shown in the debug overlay is derived from the vanishing point
+and the horizontal camera field of view:
+
+```text
+f_x = width / (2 * tan(FOV_x / 2))
+theta = atan((VP_x - c_x) / f_x)
+```
+
+where `VP_x` is the vanishing-point x coordinate, `c_x` is the image center,
+and `FOV_x` is set by the `camera_horizontal_fov_deg` parameter. The current
+default is `90.0 deg`, so with a 640 px image `f_x = 320 px`.
+
 The obstacle topic also uses `std_msgs/Float32MultiArray`:
 
 ```text
@@ -110,6 +122,7 @@ The lane debug image shows:
 - `lane_detected`: current lane inferred from the image center and the lane boundaries;
 - `vp`: vanishing point in pixels;
 - `heading_error_norm`: horizontal vanishing-point error divided by image width;
+- `angle`: approximate camera-space heading angle `theta` in degrees;
 - `lateral_error_norm`: lane-center error divided by image width;
 - `hough` and `boundaries`: detected Hough lines and selected road boundaries;
 - `x=[x1, x2, x3]`: boundary intersections with the lookahead row;
@@ -285,6 +298,9 @@ ros2 param set /lane_controller_node enable_obstacle_avoidance true
 ros2 param set /obstacle_perception_node min_area_ratio 0.003
 ros2 param set /obstacle_perception_node close_area_ratio 0.025
 ros2 param set /obstacle_perception_node close_bottom_ratio 0.72
+
+# Keep this consistent with the CoppeliaSim vision sensor perspective angle.
+ros2 param set /lane_perception_node camera_horizontal_fov_deg 90.0
 ```
 
 If debug windows show no image, check the camera publisher first:

@@ -140,6 +140,7 @@ class ObstaclePerceptionNode(Node):
         """Detect the largest red or green object in the lower camera image."""
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
+        # Red wraps around the HSV hue axis, so it is detected with two ranges.
         red_low = cv2.inRange(hsv, (0, 90, 70), (12, 255, 255))
         red_high = cv2.inRange(hsv, (170, 90, 70), (179, 255, 255))
         red_mask = cv2.bitwise_or(red_low, red_high)
@@ -158,6 +159,7 @@ class ObstaclePerceptionNode(Node):
 
         close_area = float(self.get_parameter('close_area_ratio').value)
         close_bottom = float(self.get_parameter('close_bottom_ratio').value)
+        # A larger blob or a low image position means the obstacle is visually close.
         obstacle.close = (
             obstacle.area_norm >= close_area
             or obstacle.bottom_y >= close_bottom * height
@@ -173,6 +175,7 @@ class ObstaclePerceptionNode(Node):
         height: int,
     ) -> ObstacleDetection:
         """Return the largest plausible blob from one HSV color mask."""
+        # Ignore the far upper image area; obstacles relevant to driving appear lower.
         mask[: int(0.25 * height), :] = 0
 
         kernel = np.ones((5, 5), np.uint8)
@@ -215,6 +218,8 @@ class ObstaclePerceptionNode(Node):
         if not obstacle.detected or len(lane_lines) < 3:
             return -1.0
 
+        # The obstacle is represented by the bottom-center point of its bbox.
+        # We compare that point with the lane boundaries at the same y row.
         y = obstacle.bottom_y
         xs = sorted(line.x_at(y) for line in lane_lines[:3])
         x = obstacle.center_x

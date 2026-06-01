@@ -226,8 +226,8 @@ class LanePerceptionNode(Node):
             if length < min_length or abs(dy) < 18:
                 continue
 
-            # Fit x as a function of y. This is numerically convenient because
-            # lane markings are nearly vertical in the camera image.
+            # Each Hough segment gives two points. We convert them into the
+            # line model x = m*y + b, which is easier to evaluate at any image row.
             m = dx / dy
             b = x1 - m * y1
             bottom_x = m * (height - 1) + b
@@ -362,6 +362,8 @@ class LanePerceptionNode(Node):
             image_width=float(width),
             image_center_x=float(image_center_x),
         )
+        # Evaluate every boundary on the same horizontal row. These x values
+        # are the three points shown as x1, x2, x3 in the debug image.
         boundary_xs = [line.x_at(lookahead_y) for line in boundaries[:3]]
         for index, value in enumerate(boundary_xs):
             if index == 0:
@@ -378,6 +380,7 @@ class LanePerceptionNode(Node):
                 estimate.b3 = boundaries[index].b
 
         if len(boundary_xs) >= 2:
+            # Lane centers are midpoints between adjacent road boundaries.
             estimate.left_lane_center_x = 0.5 * (boundary_xs[0] + boundary_xs[1])
         if len(boundary_xs) >= 3:
             estimate.right_lane_center_x = 0.5 * (boundary_xs[1] + boundary_xs[2])
@@ -389,6 +392,8 @@ class LanePerceptionNode(Node):
         estimate.left_x = left_line.x_at(lookahead_y)
         estimate.right_x = right_line.x_at(lookahead_y)
         estimate.selected_lane_center_x = 0.5 * (estimate.left_x + estimate.right_x)
+        # Positive/negative lateral error tells the controller which direction
+        # the selected lane center is from the camera center.
         estimate.lateral_error_norm = (
             estimate.selected_lane_center_x - image_center_x
         ) / width
@@ -418,7 +423,7 @@ class LanePerceptionNode(Node):
     def compute_robust_vanishing_point(
         self, lines: List[LaneLine]
     ) -> Tuple[Optional[Tuple[float, float]], float]:
-        """Average valid pairwise intersections from two or three boundaries."""
+        """Use pairwise line intersections to estimate the vanishing point."""
         intersections: List[Tuple[float, float]] = []
         for i, first in enumerate(lines):
             for second in lines[i + 1:]:
@@ -681,11 +686,14 @@ class LanePerceptionNode(Node):
 
         fov_deg = float(self.get_parameter('camera_horizontal_fov_deg').value)
         fov_deg = max(1.0, min(179.0, fov_deg))
+        # Pinhole-camera approximation:
+        # f_x = width / (2 * tan(FOV_x / 2))
         focal_px = width / (2.0 * math.tan(math.radians(fov_deg) / 2.0))
         if focal_px <= 1e-6:
             return 0.0
 
         image_center_x = width / 2.0
+        # theta = atan((VP_x - c_x) / f_x)
         angle_rad = math.atan((estimate.vanishing_x - image_center_x) / focal_px)
         return math.degrees(angle_rad)
 

@@ -139,6 +139,8 @@ class LaneControllerNode(Node):
         target_center_x = left_center_x if target_lane == 0.0 else right_center_x
         if target_center_x < 0.0:
             return current_lateral_error
+        # During lane following or lane change, steering uses the target lane
+        # center instead of blindly keeping the original current-lane error.
         return (target_center_x - image_center_x) / image_width
 
     def choose_target_lane(self, geometry: Float32MultiArray) -> float:
@@ -162,6 +164,7 @@ class LaneControllerNode(Node):
         obstacle_valid = self.latest_obstacle.data[0] > 0.5
         obstacle_lane = float(self.latest_obstacle.data[2])
         obstacle_close = self.latest_obstacle.data[3] > 0.5
+        # If a close obstacle is in the same lane, target the other lane.
         if obstacle_valid and obstacle_close and obstacle_lane == current_lane:
             return 1.0 if current_lane == 0.0 else 0.0
 
@@ -176,6 +179,7 @@ class LaneControllerNode(Node):
         max_angular = float(self.get_parameter('max_angular_speed').value)
         steering_sign = float(self.get_parameter('steering_sign').value)
 
+        # Simple proportional steering from lateral position and vanishing-point heading.
         angular = steering_sign * (
             kp_lateral * lateral_error + kp_heading * heading_error
         )
