@@ -13,7 +13,7 @@ The project focuses on four main steps:
 3. Obstacle detection: detect colored obstacles through the camera sensor.
 4. Path testing: choose and test a safe path on the road using the previous perception outputs.
 
-The setup remains a deliberately accessible camera-only perception problem: detect lane lines, estimate lane centers, detect obstacles, visualize the robot's decisions, and control the robot with a simple feedback controller.
+The setup is a camera perception problem: detect lane lines, estimate lane centers, detect obstacles, visualize the robot's decisions, and control the robot with a simple feedback controller.
 
 ## ROS 2 Lane And Obstacle Architecture
 
@@ -23,7 +23,7 @@ The implementation is split into three ROS 2 nodes:
 - `obstacle_perception_node`: subscribes to `/rm0/camera/image_color` and `/lane_geometry`, detects red/green obstacles, assigns them to a lane, and publishes `/obstacle_detection`.
 - `lane_controller_node`: subscribes to `/lane_geometry` and `/obstacle_detection`, then publishes velocity commands on `/rm0/cmd_vel`.
 
-This keeps perception separated from control. Lane detection and obstacle detection run from camera frames, while the controller runs at a fixed control rate using the latest valid perception messages.
+Lane detection and obstacle detection run from camera frames, while the controller runs at a fixed control rate using the latest valid perception messages.
 
 ```text
 /rm0/camera/image_color
@@ -145,7 +145,7 @@ hough_min_line_length_px: lower values accept shorter line fragments
 hough_max_line_gap_px: higher values merge more fragmented line pieces
 ```
 
-The current defaults are intentionally permissive:
+The current defaults are permissive:
 
 ```text
 hough_threshold = 24
@@ -313,7 +313,7 @@ Then open `final_with_obstacles.ttt`, press Play, and launch the ROS driver and 
 
 Only if the scene needs to be regenerated or tested from scratch, run the fallback scene-generation script below.
 
-## Generate A Fallback Scene
+## Generate A Fallback Scene ( only if you should have problem with final_with_obstacles.ttt )
 
 Open CoppeliaSim from the RoboMaster lab environment:
 
